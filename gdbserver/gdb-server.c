@@ -23,6 +23,7 @@
 
 #define DEFAULT_LOGGING_LEVEL 50
 #define DEFAULT_GDB_LISTEN_PORT 4242
+#define PERSIST	 3
 
 #define STRINGIFY_inner(name) #name
 #define STRINGIFY(name) STRINGIFY_inner(name)
@@ -42,6 +43,7 @@ typedef struct _st_state_t {
     // "/dev/serial/by-id/usb-FTDI_TTL232R-3V3_FTE531X6-if00-port0" is only 58 chars
     char devicename[100];
     int logging_level;
+    int perist_mode;
 	int listen_port;
 } st_state_t;
 
@@ -54,6 +56,7 @@ int parse_options(int argc, char** argv, st_state_t *st) {
     static struct option long_options[] = {
         {"help", no_argument, NULL, 'h'},
         {"verbose", optional_argument, NULL, 'v'},
+        {"enableP", no_argument, NULL, 'e'},
         {"device", required_argument, NULL, 'd'},
         {"stlink_version", required_argument, NULL, 's'},
         {"stlinkv1", no_argument, NULL, '1'},
@@ -62,6 +65,7 @@ int parse_options(int argc, char** argv, st_state_t *st) {
     };
 	const char * help_str = "%s - usage:\n\n"
 	"  -h, --help\t\tPrint this help\n"
+	"  -e  --enableP puts the gdbserver in persitent mode\n"
 	"  -vXX, --verbose=XX\tspecify a specific verbosity level (0..99)\n"
 	"  -v, --verbose\tspecify generally verbose logging\n"
 	"  -d <device>, --device=/dev/stlink2_1\n"
@@ -76,9 +80,10 @@ int parse_options(int argc, char** argv, st_state_t *st) {
 
 
     int option_index = 0;
+    st->perist_mode = 0;
     int c;
     int q;
-    while ((c = getopt_long(argc, argv, "hv::d:s:1p:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "hve::d:s:1p:", long_options, &option_index)) != -1) {
         switch (c) {
         case 0:
             printf("XXXXX Shouldn't really normally come here, only if there's no corresponding option\n");
@@ -125,6 +130,11 @@ int parse_options(int argc, char** argv, st_state_t *st) {
 			}
 			st->listen_port = q;
 			break;
+		case 'e':
+			st->perist_mode = PERSIST;
+			printf("Running in PERSISTENT Mode\n");
+			break;
+
         }
     }
 
@@ -176,7 +186,7 @@ int main(int argc, char** argv) {
 
 	current_memory_map = make_memory_map(sl);
 
-	while(serve(sl, state.listen_port) == 0);
+	while(serve(sl, state.listen_port) == state.perist_mode);
 
 	/* Switch back to mass storage mode before closing. */
 	stlink_reset(sl);
@@ -574,6 +584,7 @@ error:
 }
 
 int serve(stlink_t *sl, int port) {
+
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(sock < 0) {
 		perror("socket");
@@ -1071,6 +1082,12 @@ int serve(stlink_t *sl, int port) {
 			reply = strdup("OK");
 
 			break;
+		}
+		case 'k': {
+			//recieved kill from gdb
+			reply = 0;
+			printf("GDB Client Disconnected\n");
+			return PERSIST;
 		}
 
 		default:
