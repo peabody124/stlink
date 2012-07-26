@@ -8,7 +8,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "stlink-common.h"
-
+#include <signal.h> //TODO: does this work on all machines?
 
 struct opts
 {
